@@ -10,14 +10,12 @@ impl Report {
     fn is_safe(&self) -> bool {
         let mut data = self.0.clone();
 
-        0..data.iter().map(|i| {
+        (0..data.len()).any(|i| {
             let x = data.remove(i);
             let s = Self::is_data_safe(&data);
             data.insert(i, x);
             s
-        });
-
-        Self::is_data_safe(&self.0)
+        })
     }
 
     fn is_data_safe(data: &[i32]) -> bool {
@@ -49,7 +47,7 @@ fn extract_reports(input: &str) -> Vec<Report> {
         .collect()
 }
 
-fn run_for_input1(input: &str) -> usize {
+fn run_for_input(input: &str) -> usize {
     extract_reports(input)
         .iter()
         .filter(|x| x.is_safe())
@@ -60,7 +58,7 @@ fn main() {
     let mut buf = String::with_capacity(1024);
     io::stdin().read_to_string(&mut buf).unwrap();
 
-    let answer = run_for_input1(&buf);
+    let answer = run_for_input(&buf);
 
     println!("Answer: {}", answer);
 }
