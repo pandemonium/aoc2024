@@ -3,9 +3,7 @@ use std::{
     io::{self, Read},
 };
 
-use aoc2024::kombo::{
-    char, enclosed_within, separated_by, string, such_that, ParseResult, ParseState, Parser,
-};
+use aoc2024::kombo::{char, enclosed_within, separated_by, string, such_that, ParseState, Parser};
 
 #[derive(Clone, Debug)]
 enum Expression {
@@ -16,11 +14,14 @@ enum Expression {
 }
 
 #[derive(Clone, Debug)]
+struct Statement(Expression);
+
+#[derive(Clone, Debug)]
 struct Literal(Constant);
 
 #[derive(Clone, Debug)]
 enum Constant {
-    Integer(u128),
+    Integer(u64),
 }
 
 impl Display for Literal {
@@ -58,7 +59,7 @@ fn integer() -> impl Parser<In = char, Out = Literal> {
             image
                 .into_iter()
                 .collect::<String>()
-                .parse::<u128>()
+                .parse::<u64>()
                 .ok()
                 .map(Constant::Integer)
                 .map(Literal)
@@ -78,71 +79,100 @@ fn mul() -> impl Parser<In = char, Out = Expression> {
         })
 }
 
-fn expression() -> impl Parser<In = char, Out = Expression> {
-    mul()
+fn enable_mul() -> impl Parser<In = char, Out = Expression> {
+    string("do()").map(|_| Expression::Apply {
+        symbol: "do".to_owned(),
+        arguments: vec![],
+    })
 }
 
-fn extract_expressions(source_text: &str) -> Vec<Expression> {
+fn disable_mul() -> impl Parser<In = char, Out = Expression> {
+    string("don't()").map(|_| Expression::Apply {
+        symbol: "don't".to_owned(),
+        arguments: vec![],
+    })
+}
+
+fn statement() -> impl Parser<In = char, Out = Statement> {
+    disable_mul()
+        .or_else(enable_mul())
+        .or_else(mul())
+        .map(Statement)
+}
+
+fn parse_program(source_text: &str) -> Vec<Statement> {
     let input = source_text.chars().collect::<Vec<_>>();
     let mut state = ParseState::new(&input);
 
-    let mut expressions = vec![];
+    let mut statements = vec![];
 
     loop {
-        let result = expression().parse(state);
+        let result = statement().parse(state);
 
-        if let Some(expression) = result.parsed {
-            expressions.push(expression);
+        if let Some(statement) = result.parsed {
+            statements.push(statement);
             state = result.state;
         } else {
             if result.state.can_advance(1) {
                 state = result.state.advance(1);
             } else {
-                break expressions;
+                break statements;
             }
         }
     }
 }
 
-fn product(lits: Vec<Literal>) -> Literal {
-    let x = lits
-        .into_iter()
+fn product(lits: &[Literal]) -> u64 {
+    lits.into_iter()
         .map(|Literal(Constant::Integer(x))| x)
-        .product();
-
-    Literal(Constant::Integer(x))
+        .product()
 }
 
-fn sum(lits: Vec<Literal>) -> Literal {
-    let x = lits
-        .into_iter()
+fn sum(lits: &[Literal]) -> u64 {
+    lits.into_iter()
         .map(|Literal(Constant::Integer(x))| x)
-        .sum();
-
-    Literal(Constant::Integer(x))
+        .sum()
 }
 
-fn evaluate(expr: Expression) -> Literal {
+fn evaluate(expr: &Expression) -> u64 {
     match expr {
         Expression::Apply { arguments, .. } => product(arguments),
     }
 }
 
+struct AbstractMachine {
+    mul_enable: bool,
+    sum: u64,
+}
+
+impl AbstractMachine {
+    fn new() -> Self {
+        Self {
+            mul_enable: true,
+            sum: 0,
+        }
+    }
+
+    fn interpret(&mut self, program: &[Statement]) {
+        for Statement(expr) in program {
+            match expr {
+                Expression::Apply { symbol, .. } if symbol == "mul" && self.mul_enable => {
+                    self.sum += evaluate(expr)
+                }
+                Expression::Apply { symbol, .. } if symbol == "do" => self.mul_enable = true,
+                Expression::Apply { symbol, .. } if symbol == "don't" => self.mul_enable = false,
+                _otherwise => (),
+            }
+        }
+    }
+}
+
 fn run_for_input<'a>(input: &str) {
-    let exprs = extract_expressions(input);
-    //    for expr in &exprs {
-    //        println!("{}", expr);
-    //    }
-    //
-    //    println!("Count: {}", exprs.len());
+    let program = parse_program(input);
 
-    let lits = extract_expressions(input)
-        .into_iter()
-        .map(evaluate)
-        .collect();
-
-    let x = sum(lits);
-    println!("{:?}", x);
+    let mut machine = AbstractMachine::new();
+    machine.interpret(&program);
+    println!("{:?}", machine.sum);
 }
 
 fn main() {
